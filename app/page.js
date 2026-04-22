@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 
 function ArticleCard({ article, impactLabel, timeAgo, onDeepAnalyze, deepLoading, priceMap, isWatched }) {
@@ -16,9 +17,13 @@ function ArticleCard({ article, impactLabel, timeAgo, onDeepAnalyze, deepLoading
         className="article-card"
       >
         <div className="article-meta">
-          <span className="company-badge">
+          <Link
+            href={`/company/${article.companies?.symbol}`}
+            className="company-badge-link"
+            onClick={(e) => e.stopPropagation()}
+          >
             {article.companies?.symbol}
-          </span>
+          </Link>
           {article.importance && (
             <span className={`importance-badge imp-${article.importance}`}>
               {article.importance}

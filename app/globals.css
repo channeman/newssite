@@ -429,6 +429,22 @@ a {
   letter-spacing: 0.02em;
 }
 
+.company-badge-link {
+  background: var(--accent);
+  color: #fff;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.7rem;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  transition: opacity 0.15s;
+}
+
+.company-badge-link:hover {
+  opacity: 0.8;
+}
+
 .article-source {
   text-transform: uppercase;
   font-size: 0.65rem;
