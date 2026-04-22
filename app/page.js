@@ -8,6 +8,8 @@ export default function Home() {
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
+  const [fetching, setFetching] = useState(false);
+  const [fetchResult, setFetchResult] = useState(null);
 
   useEffect(() => {
     fetchCompanies();
@@ -42,6 +44,22 @@ export default function Home() {
     setLoading(false);
   }
 
+  async function handleFetchNews() {
+    setFetching(true);
+    setFetchResult(null);
+    try {
+      const res = await fetch("/api/fetch-news");
+      const data = await res.json();
+      setFetchResult(data);
+      fetchArticles();
+      fetchCompanies();
+    } catch {
+      setFetchResult({ error: "Failed to fetch" });
+    }
+    setFetching(false);
+    setTimeout(() => setFetchResult(null), 5000);
+  }
+
   function timeAgo(dateStr) {
     const diff = Date.now() - new Date(dateStr).getTime();
     const mins = Math.floor(diff / 60000);
@@ -68,7 +86,21 @@ export default function Home() {
             </option>
           ))}
         </select>
+        <button
+          onClick={handleFetchNews}
+          disabled={fetching}
+          className="btn-fetch"
+        >
+          {fetching ? "Fetching..." : "Fetch News"}
+        </button>
       </div>
+      {fetchResult && (
+        <div className={`fetch-status ${fetchResult.error ? "error" : "success"}`}>
+          {fetchResult.error
+            ? fetchResult.error
+            : `${fetchResult.articlesCreated} new articles, ${fetchResult.companiesCreated} new companies`}
+        </div>
+      )}
 
       {loading ? (
         <div className="loading">Loading articles...</div>
