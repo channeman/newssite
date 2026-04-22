@@ -3,12 +3,12 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
-function ArticleCard({ article, impactLabel, timeAgo, onDeepAnalyze, deepLoading, priceMap }) {
+function ArticleCard({ article, impactLabel, timeAgo, onDeepAnalyze, deepLoading, priceMap, isWatched }) {
   const [expanded, setExpanded] = useState(false);
   const hasAnalysis = article.ai_summary || article.importance;
 
   return (
-    <div className="article-card-wrapper">
+    <div className={`article-card-wrapper${isWatched ? " watched" : ""}`}>
       <a
         href={article.url}
         target="_blank"
@@ -302,6 +302,7 @@ export default function Home() {
               onDeepAnalyze={handleDeepAnalyze}
               deepLoading={deepLoading}
               priceMap={priceMap}
+              isWatched={watchedIds.includes(article.company_id)}
             />
           ))}
         </div>

@@ -292,6 +292,10 @@ a {
   margin-top: 0.5rem;
 }
 
+.article-card-wrapper.watched .article-card {
+  border-left: 2px solid var(--accent);
+}
+
 .article-actions {
   display: flex;
   gap: 0.5rem;
