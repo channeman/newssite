@@ -115,7 +115,7 @@ export default function CompanyPage() {
           {company.sector && <span className="profile-tag">{company.sector}</span>}
           {company.commodity && <span className="profile-tag">{company.commodity}</span>}
           {company.region && <span className="profile-tag">{company.region}</span>}
-          <span className="profile-tag">TSXV</span>
+          <span className="profile-tag">{company.exchange || "TSXV"}</span>
         </div>
       </div>
 

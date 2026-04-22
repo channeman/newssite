@@ -12,6 +12,7 @@ export default function Watchlist() {
   const [newSymbol, setNewSymbol] = useState("");
   const [newName, setNewName] = useState("");
   const [newSector, setNewSector] = useState("");
+  const [newExchange, setNewExchange] = useState("TSXV");
 
   useEffect(() => {
     fetchWatchlist();
@@ -69,6 +70,7 @@ export default function Watchlist() {
           symbol,
           name: newName.trim(),
           sector: newSector.trim() || null,
+          exchange: newExchange,
         })
         .select("id")
         .single();
@@ -119,6 +121,9 @@ export default function Watchlist() {
                 {w.companies.sector && (
                   <div className="company-sector">{w.companies.sector}</div>
                 )}
+                {w.companies.exchange && w.companies.exchange !== "TSXV" && (
+                  <div className="company-exchange">{w.companies.exchange}</div>
+                )}
               </div>
             ))}
           </div>
@@ -162,6 +167,18 @@ export default function Watchlist() {
                   onChange={(e) => setNewSector(e.target.value)}
                   className="search-input create-input"
                 />
+                <select
+                  value={newExchange}
+                  onChange={(e) => setNewExchange(e.target.value)}
+                  className="search-input create-input"
+                >
+                  <option value="TSXV">TSX Venture (TSXV)</option>
+                  <option value="TSX">TSX</option>
+                  <option value="CSE">CSE</option>
+                  <option value="NEO">NEO</option>
+                  <option value="NASDAQ">NASDAQ</option>
+                  <option value="NYSE">NYSE</option>
+                </select>
                 <div className="create-actions">
                   <button
                     className="btn-add"
@@ -176,7 +193,8 @@ export default function Watchlist() {
                       setShowCreate(false);
                       setNewSymbol("");
                       setNewName("");
-                      setNewSector("");
+    setNewSector("");
+    setNewExchange("TSXV");
                     }}
                   >
                     Cancel

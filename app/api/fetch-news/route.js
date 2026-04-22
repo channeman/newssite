@@ -165,7 +165,7 @@ export async function GET(request) {
   try {
     const { data: watched } = await supabase
       .from("watched_companies")
-      .select("company_id, companies(id, symbol, name, sector)");
+      .select("company_id, companies(id, symbol, name, sector, exchange)");
 
     if (watched && watched.length > 0) {
       const nonMining = watched.filter(
@@ -176,10 +176,12 @@ export async function GET(request) {
         if (!w.companies) continue;
         const symbol = w.companies.symbol;
         const companyName = w.companies.name || symbol;
+        const exchange = w.companies.exchange || "TSXV";
+        const suffix = { TSXV: ".V", TSX: ".TO", CSE: ".CN", NASDAQ: "", NYSE: "", NEO: ".NE" }[exchange] || ".V";
         let foundForCompany = 0;
 
         try {
-          const yfUrl = `https://finance.yahoo.com/rss/headline?s=${symbol}.V`;
+          const yfUrl = `https://finance.yahoo.com/rss/headline?s=${symbol}${suffix}`;
           const yfRes = await fetch(yfUrl, {
             headers: { "User-Agent": "Mozilla/5.0" },
             signal: AbortSignal.timeout(10000),

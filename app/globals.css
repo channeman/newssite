@@ -528,6 +528,14 @@ a {
   letter-spacing: 0.04em;
 }
 
+.company-exchange {
+  font-size: 0.65rem;
+  color: var(--accent);
+  margin-top: 0.15rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .add-section {
   border-top: 1px solid var(--border);
   padding-top: 1.5rem;
