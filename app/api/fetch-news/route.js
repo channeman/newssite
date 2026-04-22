@@ -1,6 +1,65 @@
 import { createClient } from "@supabase/supabase-js";
 
-export async function GET() {
+const JMN_RSS_URL =
+  "https://www.juniorminingnetwork.com/index.php?option=com_obrss&task=feed&id=1:press-releases&format=feed&Itemid=688";
+
+function parseRSS(xml) {
+  const items = [];
+  const itemRegex = /<item>([\s\S]*?)<\/item>/g;
+  let match;
+
+  while ((match = itemRegex.exec(xml)) !== null) {
+    const block = match[1];
+
+    const title =
+      block.match(/<title><!\[CDATA\[(.*?)\]\]>/)?.[1] ||
+      block.match(/<title>(.*?)<\/title>/)?.[1] ||
+      "";
+
+    const link =
+      block.match(/<link>(.*?)<\/link>/)?.[1] || "";
+
+    const pubDate =
+      block.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || "";
+
+    const descMatch = block.match(/<description><!\[CDATA\[([\s\S]*?)\]\]>/);
+    const summary = descMatch
+      ? descMatch[1].replace(/<[^>]+>/g, "").trim().slice(0, 500)
+      : "";
+
+    if (title && link) {
+      items.push({ title, link, pubDate, summary });
+    }
+  }
+
+  return items;
+}
+
+function extractFromURL(url) {
+  const tsxvMatch = url.match(/\/press-releases\/\d+-tsx-venture\/([a-z0-9]+)\//i);
+  if (tsxvMatch) {
+    return { exchange: "TSXV", symbol: tsxvMatch[1].toUpperCase() };
+  }
+
+  const tsxMatch = url.match(/\/press-releases\/\d+-tsx\/([a-z0-9]+)\//i);
+  if (tsxMatch) {
+    return { exchange: "TSX", symbol: tsxMatch[1].toUpperCase() };
+  }
+
+  const cseMatch = url.match(/\/press-releases\/\d+-cse\/([a-z0-9]+)\//i);
+  if (cseMatch) {
+    return { exchange: "CSE", symbol: cseMatch[1].toUpperCase() };
+  }
+
+  const neoMatch = url.match(/\/press-releases\/\d+-neo\/([a-z0-9]+)\//i);
+  if (neoMatch) {
+    return { exchange: "NEO", symbol: neoMatch[1].toUpperCase() };
+  }
+
+  return null;
+}
+
+export async function GET(request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -10,62 +69,125 @@ export async function GET() {
 
   const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-  const { data: watched } = await supabase
-    .from("watched_companies")
-    .select("company_id, companies(symbol)");
+  try {
+    const res = await fetch(JMN_RSS_URL, {
+      headers: { "User-Agent": "TSXVNewsBot/1.0" },
+    });
+    const xml = await res.text();
+    const items = parseRSS(xml);
 
-  if (!watched || watched.length === 0) {
-    return Response.json({ message: "No watched companies" });
-  }
+    let companiesCreated = 0;
+    let articlesCreated = 0;
+    let skipped = 0;
+    const errors = [];
 
-  const results = [];
+    for (const item of items) {
+      const info = extractFromURL(item.link);
+      if (!info) {
+        skipped++;
+        continue;
+      }
 
-  for (const w of watched) {
-    const symbol = w.companies.symbol;
-    const rssUrl = `https://finance.yahoo.com/rss/headline?s=${symbol}.V`;
+      if (info.exchange !== "TSXV") {
+        skipped++;
+        continue;
+      }
 
-    try {
-      const res = await fetch(rssUrl, {
-        headers: { "User-Agent": "Mozilla/5.0" },
-      });
-      const text = await res.text();
+      const { data: existing } = await supabase
+        .from("articles")
+        .select("id")
+        .eq("url", item.link)
+        .single();
 
-      const items = text
-        .split("<item>")
-        .slice(1)
-        .map((item) => {
-          const title = item.match(/<title><!\[CDATA\[(.*?)\]\]>/)?.[1] ||
-            item.match(/<title>(.*?)<\/title>/)?.[1] || "";
-          const link = item.match(/<link>(.*?)<\/link>/)?.[1] || "";
-          const pubDate = item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || "";
-          return { title, link, pubDate };
-        })
-        .filter((i) => i.title && i.link);
+      if (existing) {
+        skipped++;
+        continue;
+      }
 
-      for (const item of items.slice(0, 10)) {
-        const { data: existing } = await supabase
-          .from("articles")
+      let companyId;
+
+      const { data: existingCompany } = await supabase
+        .from("companies")
+        .select("id")
+        .eq("symbol", info.symbol)
+        .single();
+
+      if (existingCompany) {
+        companyId = existingCompany.id;
+      } else {
+        const { data: newCompany, error: companyErr } = await supabase
+          .from("companies")
+          .insert({
+            symbol: info.symbol,
+            name: extractCompanyName(item.title),
+            sector: "Mining",
+          })
           .select("id")
-          .eq("url", item.link)
           .single();
 
-        if (!existing) {
-          const { error } = await supabase.from("articles").insert({
-            company_id: w.company_id,
-            title: item.title,
-            url: item.link,
-            source: "Yahoo Finance",
-            published_at: item.pubDate
-              ? new Date(item.pubDate).toISOString()
-              : new Date().toISOString(),
-          });
-          if (!error) results.push(item.title);
+        if (companyErr) {
+          errors.push(`Company ${info.symbol}: ${companyErr.message}`);
+          continue;
         }
+        companyId = newCompany.id;
+        companiesCreated++;
       }
-    } catch (e) {
-      console.error(`Failed to fetch for ${symbol}:`, e.message);
+
+      const publishedAt = item.pubDate
+        ? new Date(item.pubDate).toISOString()
+        : new Date().toISOString();
+
+      const { error: articleErr } = await supabase.from("articles").insert({
+        company_id: companyId,
+        title: item.title,
+        url: item.link,
+        source: "Junior Mining Network",
+        published_at: publishedAt,
+        summary: item.summary || null,
+      });
+
+      if (articleErr) {
+        errors.push(`Article: ${articleErr.message}`);
+      } else {
+        articlesCreated++;
+      }
     }
+
+    return Response.json({
+      ok: true,
+      companiesCreated,
+      articlesCreated,
+      skipped,
+      errors: errors.length ? errors : undefined,
+    });
+  } catch (e) {
+    return Response.json({ error: e.message }, { status: 500 });
+  }
+}
+
+function extractCompanyName(title) {
+  const words = title.split(/\s+/);
+  const stopWords = new Set([
+    "announces", "reports", "provides", "update", "updates",
+    "and", "the", "for", "in", "of", "at", "to", "from", "with",
+    "on", "by", "an", "a", "its", "is", "has", "have", "been",
+    "agrees", "signs", "files", "receives", "commences", "completes",
+    "drills", "intersects", "results", "appointment", "acquisition",
+    "financing", "warrant", "options", "grant", "grants", "private",
+    "placement", "closed", "closing", "enters", "option", "agreement",
+    "earn", "up", "100%", "appoints", "board", "directors", "director",
+    "officer", "ceo", "cfo", "president", "chairman", "retires",
+    "named", "joins", "mining", "minerals", "metals", "gold", "silver",
+    "copper", "lithium", "uranium", "zinc", "lead", "nickel",
+    "corp", "corp.", "inc", "inc.", "ltd", "ltd.", "resources",
+    "exploration", "energy", "royalty", "goldcorp", "barrick",
+  ]);
+
+  let companyWords = [];
+  for (const word of words) {
+    if (stopWords.has(word.toLowerCase().replace(/[.,]/g, ""))) break;
+    companyWords.push(word);
   }
 
-  return Response.json({ fetched: results.length, articles: results });
+  return companyWords.length > 0 ? companyWords.join(" ") : title.split(" - ")[0];
 }

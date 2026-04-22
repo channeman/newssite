@@ -5,12 +5,25 @@ import { supabase } from "@/lib/supabaseClient";
 
 export default function Home() {
   const [articles, setArticles] = useState([]);
+  const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
 
   useEffect(() => {
+    fetchCompanies();
+  }, []);
+
+  useEffect(() => {
     fetchArticles();
   }, [filter]);
+
+  async function fetchCompanies() {
+    const { data } = await supabase
+      .from("companies")
+      .select("id, symbol, name")
+      .order("symbol");
+    setCompanies(data || []);
+  }
 
   async function fetchArticles() {
     setLoading(true);
@@ -49,6 +62,11 @@ export default function Home() {
           className="filter-select"
         >
           <option value="all">All Companies</option>
+          {companies.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.symbol} — {c.name}
+            </option>
+          ))}
         </select>
       </div>
 
