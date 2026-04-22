@@ -8,7 +8,7 @@ Context:
 - Headline: {headline}
 - Initial AI assessment: importance {importance}/5, impact: {impact}
 
-Peer companies (similar size, same commodity, same region):
+Peer companies (same or similar mineralization type):
 {peer_info}
 
 Recent peer news:
@@ -20,16 +20,44 @@ Company's own recent history:
 Provide your analysis in this exact JSON format:
 {
   "thesis": "2-3 sentence investment thesis on what this means for the company",
-  "peer_comparison": "Compare specifically to the peers listed above. Are they ahead or behind in exploration? How do their results compare? Who has the better project/location?",
-  "relative_position": "Is this company a leader, middle-of-pack, or laggard vs these peers? Why?",
-  "stock_impact": "Expected short-term stock impact. Be specific (e.g. 'could see 10-20% pop' or 'likely neutral'). Reference how peers' stocks reacted to similar news if known.",
+  "stage_comparison": "What exploration stage is this company at (grassroots, advanced exploration, pre-feasibility, feasibility, construction, production)? How does this compare to peers? Who is further ahead?",
+  "peer_comparison": "Compare to the peers listed above. Focus on: deposit type similarities, grade comparisons if available, scale of project, advancement stage. Are peers getting better results? Is this company catching up or leading?",
+  "relative_position": "Among these peers, where does this company rank and why? Consider project maturity, resource size potential, and deposit quality.",
+  "stock_impact": "Expected short-term stock impact. Be specific (e.g. 'could see 10-20% pop' or 'likely neutral'). Compare to how peers' stocks typically react to similar news.",
   "catalyst_type": "One of: drill_result, resource_estimate, permitting, financing, m&a, management, production, exploration_update, corporate, other",
   "key_risk": "What could go wrong with this thesis?",
   "watch_for": "What milestones or data points should investors watch for next?",
-  "grade_assessment": "If drill results: are grades exceptional/good/average/sub-par for this deposit type and region? Compare to peer results. If not drill results: 'N/A'"
+  "grade_assessment": "If drill results: are grades exceptional/good/average/sub-par for this deposit type? Compare to known peer results or typical grades for this style of mineralization. If not drill results: 'N/A'"
 }
 
-Be specific, use numbers, reference peers by name. Return ONLY valid JSON.`;
+Be specific, use numbers, reference peers by name. Focus on mineralization similarity and project stage rather than geography. Return ONLY valid JSON.`;
+
+const COMMODITY_GROUPS = {
+  gold: ["gold", "precious metals", "gold-silver"],
+  silver: ["silver", "gold-silver", "precious metals"],
+  copper: ["copper", "copper-gold", "copper-zinc", "base metals", "porphyry copper"],
+  uranium: ["uranium"],
+  lithium: ["lithium"],
+  nickel: ["nickel", "base metals"],
+  zinc: ["zinc", "zinc-lead", "copper-zinc", "base metals"],
+  cobalt: ["cobalt", "base metals"],
+  iron: ["iron ore"],
+  platinum: ["platinum", "palladium", "pgm", "precious metals"],
+};
+
+function getCommoditySearches(commodity) {
+  if (!commodity) return [];
+  const lower = commodity.toLowerCase();
+  const searches = [commodity];
+
+  for (const [key, synonyms] of Object.entries(COMMODITY_GROUPS)) {
+    if (lower.includes(key) || synonyms.some((s) => lower.includes(s))) {
+      searches.push(...synonyms);
+    }
+  }
+
+  return [...new Set(searches)];
+}
 
 export async function POST(request) {
   const { articleId } = await request.json();
@@ -67,25 +95,46 @@ export async function POST(request) {
   let peerNewsText = "No recent peer news.";
 
   if (company?.commodity) {
-    const { data: peerCompanies } = await supabase
-      .from("companies")
-      .select("id, symbol, name, commodity, region")
-      .eq("commodity", company.commodity)
-      .neq("id", company.id)
-      .limit(10);
+    const searches = getCommoditySearches(company.commodity);
 
-    if (peerCompanies && peerCompanies.length > 0) {
-      const regionMatches = company.region
-        ? peerCompanies.filter((p) => p.region === company.region)
-        : [];
+    let allPeers = [];
 
-      const rankedPeers = regionMatches.length > 0 ? regionMatches : peerCompanies;
+    if (searches.length > 0) {
+      const filter = searches.join(",");
+      const { data: exactPeers } = await supabase
+        .from("companies")
+        .select("id, symbol, name, commodity, region")
+        .in("commodity", searches)
+        .neq("id", company.id)
+        .limit(15);
 
-      peerInfoText = rankedPeers
+      if (exactPeers) allPeers = exactPeers;
+    }
+
+    if (allPeers.length === 0) {
+      const { data: broadPeers } = await supabase
+        .from("companies")
+        .select("id, symbol, name, commodity, region")
+        .neq("id", company.id)
+        .limit(10);
+
+      if (broadPeers) allPeers = broadPeers;
+    }
+
+    if (allPeers.length > 0) {
+      const seen = new Set();
+      const unique = allPeers.filter((p) => {
+        if (seen.has(p.id)) return false;
+        seen.add(p.id);
+        return true;
+      });
+
+      peerInfoText = unique
+        .slice(0, 10)
         .map((p) => `- ${p.name} (${p.symbol}): ${p.commodity}, ${p.region || "unknown region"}`)
         .join("\n");
 
-      const peerIds = rankedPeers.map((p) => p.id);
+      const peerIds = unique.slice(0, 10).map((p) => p.id);
       const { data: peerArticles } = await supabase
         .from("articles")
         .select("title, published_at, importance, impact, companies(symbol, name)")
@@ -167,6 +216,7 @@ export async function POST(request) {
       parsed.thesis ? `**Thesis:** ${parsed.thesis}` : null,
       parsed.grade_assessment && parsed.grade_assessment !== "N/A"
         ? `**Grade Assessment:** ${parsed.grade_assessment}` : null,
+      parsed.stage_comparison ? `**Stage Comparison:** ${parsed.stage_comparison}` : null,
       parsed.peer_comparison ? `**Peer Comparison:** ${parsed.peer_comparison}` : null,
       parsed.relative_position ? `**Relative Position:** ${parsed.relative_position}` : null,
       parsed.stock_impact ? `**Expected Stock Impact:** ${parsed.stock_impact}` : null,
