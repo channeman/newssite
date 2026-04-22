@@ -81,20 +81,34 @@ export async function GET(request) {
     const xml = await res.text();
     const items = parseRSS(xml);
 
-    for (const item of items) {
+    const now = new Date();
+
+  for (const item of items) {
       const info = extractFromURL(item.link);
       if (!info || info.exchange !== "TSXV") {
         skipped++;
         continue;
       }
 
+      let publishedAt = item.pubDate
+        ? new Date(item.pubDate)
+        : new Date();
+      if (publishedAt > now) publishedAt = now;
+      const publishedISO = publishedAt.toISOString();
+
       const { data: existing } = await supabase
         .from("articles")
-        .select("id")
+        .select("id, published_at")
         .eq("url", item.link)
         .single();
 
       if (existing) {
+        if (new Date(existing.published_at) > now) {
+          await supabase
+            .from("articles")
+            .update({ published_at: publishedISO })
+            .eq("id", existing.id);
+        }
         skipped++;
         continue;
       }
@@ -127,16 +141,12 @@ export async function GET(request) {
         companiesCreated++;
       }
 
-      const publishedAt = item.pubDate
-        ? new Date(item.pubDate).toISOString()
-        : new Date().toISOString();
-
       const { error: articleErr } = await supabase.from("articles").insert({
         company_id: companyId,
         title: item.title,
         url: item.link,
         source: "Junior Mining Network",
-        published_at: publishedAt,
+        published_at: publishedISO,
         summary: item.summary || null,
       });
 
@@ -184,20 +194,19 @@ export async function GET(request) {
               continue;
             }
 
-            const publishedAt = item.pubDate
-              ? new Date(item.pubDate).toISOString()
-              : new Date().toISOString();
+      let publishedAt = item.pubDate
+        ? new Date(item.pubDate)
+        : new Date();
+      if (publishedAt > now) publishedAt = now;
 
-            const { error: articleErr } = await supabase
-              .from("articles")
-              .insert({
-                company_id: w.companies.id,
-                title: item.title,
-                url: item.link,
-                source: "Yahoo Finance",
-                published_at: publishedAt,
-                summary: item.summary || null,
-              });
+      const { error: articleErr } = await supabase.from("articles").insert({
+        company_id: w.companies.id,
+        title: item.title,
+        url: item.link,
+        source: "Yahoo Finance",
+        published_at: publishedAt.toISOString(),
+        summary: item.summary || null,
+      });
 
             if (articleErr) {
               errors.push(`YF ${symbol}: ${articleErr.message}`);
