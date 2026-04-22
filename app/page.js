@@ -3,6 +3,83 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
+function ArticleCard({ article, impactLabel, timeAgo, onDeepAnalyze, deepLoading }) {
+  const [expanded, setExpanded] = useState(false);
+  const hasAnalysis = article.ai_summary || article.importance;
+
+  return (
+    <div className="article-card-wrapper">
+      <a
+        href={article.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="article-card"
+      >
+        <div className="article-meta">
+          <span className="company-badge">
+            {article.companies?.symbol}
+          </span>
+          {article.importance && (
+            <span className={`importance-badge imp-${article.importance}`}>
+              {article.importance}
+            </span>
+          )}
+          {article.impact && (
+            <span className={`impact-badge impact-${article.impact}`}>
+              {impactLabel(article.impact)}
+            </span>
+          )}
+          <span className="article-source">{article.source}</span>
+          <span className="article-time">{timeAgo(article.published_at)}</span>
+        </div>
+        <h2 className="article-title">{article.title}</h2>
+        {article.ai_summary && (
+          <p className="article-ai-summary">{article.ai_summary}</p>
+        )}
+        {article.summary && !article.ai_summary && (
+          <p className="article-summary">{article.summary}</p>
+        )}
+      </a>
+      {hasAnalysis && (
+        <div className="article-actions">
+          {article.deep_analysis ? (
+            <button
+              className="btn-deep-toggle"
+              onClick={() => setExpanded(!expanded)}
+            >
+              {expanded ? "Hide" : "Deep Analysis"}
+            </button>
+          ) : (
+            <button
+              className="btn-deep-analyze"
+              onClick={() => onDeepAnalyze(article.id)}
+              disabled={deepLoading[article.id]}
+            >
+              {deepLoading[article.id] ? "Analyzing..." : "Deep Analyze"}
+            </button>
+          )}
+        </div>
+      )}
+      {expanded && article.deep_analysis && (
+        <div className="deep-analysis">
+          {article.deep_analysis.split("\n\n").map((block, i) => {
+            const boldMatch = block.match(/^\*\*(.*?)\*\*(.*)/);
+            if (boldMatch) {
+              return (
+                <div key={i} className="deep-block">
+                  <span className="deep-label">{boldMatch[1]}</span>
+                  <span>{boldMatch[2]}</span>
+                </div>
+              );
+            }
+            return <div key={i} className="deep-block">{block}</div>;
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Home() {
   const [articles, setArticles] = useState([]);
   const [companies, setCompanies] = useState([]);
@@ -12,6 +89,7 @@ export default function Home() {
   const [fetchResult, setFetchResult] = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeResult, setAnalyzeResult] = useState(null);
+  const [deepLoading, setDeepLoading] = useState({});
 
   useEffect(() => {
     fetchCompanies();
@@ -77,6 +155,26 @@ export default function Home() {
     setTimeout(() => setAnalyzeResult(null), 8000);
   }
 
+  async function handleDeepAnalyze(articleId) {
+    setDeepLoading((prev) => ({ ...prev, [articleId]: true }));
+    try {
+      const res = await fetch("/api/deep-analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ articleId }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setArticles((prev) =>
+          prev.map((a) =>
+            a.id === articleId ? { ...a, deep_analysis: data.analysis } : a
+          )
+        );
+      }
+    } catch {}
+    setDeepLoading((prev) => ({ ...prev, [articleId]: false }));
+  }
+
   function impactLabel(impact) {
     const labels = {
       very_positive: "++",
@@ -126,7 +224,7 @@ export default function Home() {
           disabled={analyzing}
           className="btn-analyze"
         >
-          {analyzing ? "Analyzing..." : "AI Analyze"}
+          {analyzing ? "..." : "AI"}
         </button>
       </div>
       {fetchResult && (
@@ -153,38 +251,14 @@ export default function Home() {
       ) : (
         <div className="article-list">
           {articles.map((article) => (
-            <a
+            <ArticleCard
               key={article.id}
-              href={article.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="article-card"
-            >
-              <div className="article-meta">
-                <span className="company-badge">
-                  {article.companies?.symbol}
-                </span>
-                {article.importance && (
-                  <span className={`importance-badge imp-${article.importance}`}>
-                    {article.importance}
-                  </span>
-                )}
-                {article.impact && (
-                  <span className={`impact-badge impact-${article.impact}`}>
-                    {impactLabel(article.impact)}
-                  </span>
-                )}
-                <span className="article-source">{article.source}</span>
-                <span className="article-time">{timeAgo(article.published_at)}</span>
-              </div>
-              <h2 className="article-title">{article.title}</h2>
-              {article.ai_summary && (
-                <p className="article-ai-summary">{article.ai_summary}</p>
-              )}
-              {article.summary && !article.ai_summary && (
-                <p className="article-summary">{article.summary}</p>
-              )}
-            </a>
+              article={article}
+              impactLabel={impactLabel}
+              timeAgo={timeAgo}
+              onDeepAnalyze={handleDeepAnalyze}
+              deepLoading={deepLoading}
+            />
           ))}
         </div>
       )}

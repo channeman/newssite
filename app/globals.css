@@ -212,6 +212,100 @@ a {
   font-style: italic;
 }
 
+.article-card-wrapper {
+  position: relative;
+}
+
+.article-card-wrapper + .article-card-wrapper {
+  margin-top: 0.5rem;
+}
+
+.article-actions {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0 1.25rem 0.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  margin-top: -2px;
+}
+
+.article-card-wrapper:first-child .article-card {
+  border-radius: 8px 8px 0 0;
+}
+
+.article-card-wrapper:first-child .article-actions {
+  border-radius: 0 0 8px 8px;
+}
+
+.article-card-wrapper:first-child .deep-analysis {
+  border-radius: 0 0 8px 8px;
+}
+
+.article-card {
+  border-radius: 8px;
+}
+
+.article-card-wrapper .article-card {
+  border-radius: 8px 8px 0 0;
+}
+
+.btn-deep-analyze {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.7rem;
+  cursor: pointer;
+  padding: 0.2rem 0;
+  transition: color 0.15s;
+}
+
+.btn-deep-analyze:hover {
+  color: var(--accent);
+}
+
+.btn-deep-analyze:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-deep-toggle {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0.2rem 0;
+}
+
+.btn-deep-toggle:hover {
+  text-decoration: underline;
+}
+
+.deep-analysis {
+  background: rgba(99, 102, 241, 0.05);
+  border: 1px solid var(--border);
+  border-top: none;
+  padding: 0.75rem 1.25rem;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.deep-block {
+  margin-bottom: 0.5rem;
+}
+
+.deep-block:last-child {
+  margin-bottom: 0;
+}
+
+.deep-label {
+  font-weight: 600;
+  color: var(--accent);
+}
+
 .loading,
 .empty {
   text-align: center;
