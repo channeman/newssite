@@ -6,7 +6,9 @@ const BATCH_PROMPT = `You are a mining industry analyst. Analyze these TSXV mini
   "summary": "1-2 sentence plain English summary",
   "importance": 1-5,
   "impact": one of: "very_positive", "positive", "neutral", "negative", "very_negative",
-  "impact_reason": "1 sentence explaining why"
+  "impact_reason": "1 sentence explaining why",
+  "commodity": "primary commodity (gold, copper, lithium, uranium, silver, zinc, nickel, iron ore, platinum, palladium, cobalt, etc.)",
+  "region": "geographic region of the project (e.g. Ontario, BC, Quebec, Nevada, Latin America, West Africa, etc.)"
 }
 
 Importance guidelines:
@@ -39,7 +41,7 @@ export async function GET() {
 
   const { data: articles, error: fetchErr } = await supabase
     .from("articles")
-    .select("id, title")
+    .select("id, title, company_id")
     .is("ai_summary", null)
     .order("published_at", { ascending: false })
     .limit(5);
@@ -85,6 +87,7 @@ export async function GET() {
     const parsed = JSON.parse(jsonMatch[0]);
     let analyzed = 0;
     const errors = [];
+    const companyUpdates = {};
 
     for (let i = 0; i < articles.length; i++) {
       const article = articles[i];
@@ -112,6 +115,32 @@ export async function GET() {
         errors.push(`Article ${article.id}: ${updateErr.message}`);
       } else {
         analyzed++;
+      }
+
+      if (article.company_id && (item.commodity || item.region)) {
+        if (!companyUpdates[article.company_id]) {
+          companyUpdates[article.company_id] = {};
+        }
+        if (item.commodity) companyUpdates[article.company_id].commodity = item.commodity;
+        if (item.region) companyUpdates[article.company_id].region = item.region;
+      }
+    }
+
+    for (const [companyId, updates] of Object.entries(companyUpdates)) {
+      const { data: existing } = await supabase
+        .from("companies")
+        .select("commodity, region")
+        .eq("id", companyId)
+        .single();
+
+      if (existing && !existing.commodity) {
+        await supabase
+          .from("companies")
+          .update({
+            commodity: updates.commodity || existing.commodity,
+            region: updates.region || existing.region,
+          })
+          .eq("id", companyId);
       }
     }
 
