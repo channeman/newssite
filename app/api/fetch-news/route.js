@@ -22,13 +22,16 @@ function parseRSS(xml) {
     const pubDate =
       block.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || "";
 
+    const source =
+      block.match(/<source[^>]*>(.*?)<\/source>/)?.[1] || "";
+
     const descMatch = block.match(/<description><!\[CDATA\[([\s\S]*?)\]\]>/);
     const summary = descMatch
       ? descMatch[1].replace(/<[^>]+>/g, "").trim().slice(0, 500)
       : "";
 
     if (title && link) {
-      items.push({ title, link, pubDate, summary });
+      items.push({ title, link, pubDate, summary, source });
     }
   }
 
@@ -73,6 +76,7 @@ export async function GET(request) {
   let articlesCreated = 0;
   let skipped = 0;
   const errors = [];
+  const now = new Date();
 
   try {
     const res = await fetch(JMN_RSS_URL, {
@@ -80,8 +84,6 @@ export async function GET(request) {
     });
     const xml = await res.text();
     const items = parseRSS(xml);
-
-    const now = new Date();
 
   for (const item of items) {
       const info = extractFromURL(item.link);
@@ -163,7 +165,7 @@ export async function GET(request) {
   try {
     const { data: watched } = await supabase
       .from("watched_companies")
-      .select("company_id, companies(id, symbol, sector)");
+      .select("company_id, companies(id, symbol, name, sector)");
 
     if (watched && watched.length > 0) {
       const nonMining = watched.filter(
@@ -173,12 +175,16 @@ export async function GET(request) {
       for (const w of nonMining) {
         if (!w.companies) continue;
         const symbol = w.companies.symbol;
+        const companyName = w.companies.name || symbol;
+        let foundForCompany = 0;
 
         try {
           const yfUrl = `https://finance.yahoo.com/rss/headline?s=${symbol}.V`;
           const yfRes = await fetch(yfUrl, {
             headers: { "User-Agent": "Mozilla/5.0" },
+            signal: AbortSignal.timeout(10000),
           });
+          if (!yfRes.ok) throw new Error(`HTTP ${yfRes.status}`);
           const yfXml = await yfRes.text();
           const yfItems = parseRSS(yfXml);
 
@@ -194,33 +200,83 @@ export async function GET(request) {
               continue;
             }
 
-      let publishedAt = item.pubDate
-        ? new Date(item.pubDate)
-        : new Date();
-      if (publishedAt > now) publishedAt = now;
+            let publishedAt = item.pubDate
+              ? new Date(item.pubDate)
+              : new Date();
+            if (publishedAt > now) publishedAt = now;
 
-      const { error: articleErr } = await supabase.from("articles").insert({
-        company_id: w.companies.id,
-        title: item.title,
-        url: item.link,
-        source: "Yahoo Finance",
-        published_at: publishedAt.toISOString(),
-        summary: item.summary || null,
-      });
+            const { error: articleErr } = await supabase.from("articles").insert({
+              company_id: w.companies.id,
+              title: item.title,
+              url: item.link,
+              source: "Yahoo Finance",
+              published_at: publishedAt.toISOString(),
+              summary: item.summary || null,
+            });
 
             if (articleErr) {
               errors.push(`YF ${symbol}: ${articleErr.message}`);
             } else {
               articlesCreated++;
+              foundForCompany++;
             }
           }
-        } catch {
-          errors.push(`YF ${symbol}: fetch failed`);
+        } catch (e) {
+          errors.push(`YF ${symbol}: ${e.message}`);
+        }
+
+        if (foundForCompany === 0) {
+          try {
+            const query = encodeURIComponent(`"${companyName}" OR "${symbol}.V" TSXV`);
+            const gnUrl = `https://news.google.com/rss/search?q=${query}&hl=en&gl=CA&ceid=CA:en`;
+            const gnRes = await fetch(gnUrl, {
+              headers: { "User-Agent": "Mozilla/5.0" },
+              signal: AbortSignal.timeout(10000),
+            });
+            if (!gnRes.ok) throw new Error(`HTTP ${gnRes.status}`);
+            const gnXml = await gnRes.text();
+            const gnItems = parseRSS(gnXml);
+
+            for (const item of gnItems.slice(0, 10)) {
+              const { data: existing } = await supabase
+                .from("articles")
+                .select("id")
+                .eq("url", item.link)
+                .single();
+
+              if (existing) {
+                skipped++;
+                continue;
+              }
+
+              let publishedAt = item.pubDate
+                ? new Date(item.pubDate)
+                : new Date();
+              if (publishedAt > now) publishedAt = now;
+
+              const { error: articleErr } = await supabase.from("articles").insert({
+                company_id: w.companies.id,
+                title: item.title,
+                url: item.link,
+                source: item.source || "Google News",
+                published_at: publishedAt.toISOString(),
+                summary: item.summary || null,
+              });
+
+              if (articleErr) {
+                errors.push(`GN ${symbol}: ${articleErr.message}`);
+              } else {
+                articlesCreated++;
+              }
+            }
+          } catch (e) {
+            errors.push(`GN ${symbol}: ${e.message}`);
+          }
         }
       }
     }
   } catch (e) {
-    errors.push(`YF watchlist: ${e.message}`);
+    errors.push(`Watchlist fetch: ${e.message}`);
   }
 
   return Response.json({
