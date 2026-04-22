@@ -8,6 +8,10 @@ export default function Watchlist() {
   const [allCompanies, setAllCompanies] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [newSymbol, setNewSymbol] = useState("");
+  const [newName, setNewName] = useState("");
+  const [newSector, setNewSector] = useState("");
 
   useEffect(() => {
     fetchWatchlist();
@@ -43,6 +47,42 @@ export default function Watchlist() {
       .delete()
       .eq("company_id", companyId);
     fetchWatchlist();
+  }
+
+  async function createAndAdd() {
+    if (!newSymbol.trim() || !newName.trim()) return;
+    const symbol = newSymbol.trim().toUpperCase();
+
+    const { data: existing } = await supabase
+      .from("companies")
+      .select("id")
+      .eq("symbol", symbol)
+      .single();
+
+    let companyId;
+    if (existing) {
+      companyId = existing.id;
+    } else {
+      const { data: created, error } = await supabase
+        .from("companies")
+        .insert({
+          symbol,
+          name: newName.trim(),
+          sector: newSector.trim() || null,
+        })
+        .select("id")
+        .single();
+      if (error) return;
+      companyId = created.id;
+    }
+
+    await supabase.from("watched_companies").insert({ company_id: companyId });
+    setNewSymbol("");
+    setNewName("");
+    setNewSector("");
+    setShowCreate(false);
+    fetchWatchlist();
+    fetchAllCompanies();
   }
 
   const watchedIds = new Set(companies.map((w) => w.company_id));
@@ -85,35 +125,98 @@ export default function Watchlist() {
 
           {companies.length === 0 && (
             <div className="empty">
-              <p>Your watchlist is empty. Search and add TSXV companies below.</p>
+              <p>Your watchlist is empty. Add companies below.</p>
             </div>
           )}
 
           <div className="add-section">
             <h2>Add Company</h2>
-            <input
-              type="text"
-              placeholder="Search by symbol or name..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="search-input"
-            />
-            {search && filtered.length > 0 && (
-              <div className="search-results">
-                {filtered.slice(0, 10).map((c) => (
-                  <div key={c.id} className="search-result-row">
-                    <span className="result-symbol">{c.symbol}</span>
-                    <span className="result-name">{c.name}</span>
-                    <button
-                      className="btn-add"
-                      onClick={() => addToWatchlist(c.id)}
-                    >
-                      + Add
-                    </button>
-                  </div>
-                ))}
+
+            {!showCreate ? (
+              <button
+                className="btn-create-toggle"
+                onClick={() => setShowCreate(true)}
+              >
+                + Create New
+              </button>
+            ) : (
+              <div className="create-form">
+                <input
+                  type="text"
+                  placeholder="Symbol (e.g. ACME)"
+                  value={newSymbol}
+                  onChange={(e) => setNewSymbol(e.target.value)}
+                  className="search-input create-input"
+                />
+                <input
+                  type="text"
+                  placeholder="Company name"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  className="search-input create-input"
+                />
+                <input
+                  type="text"
+                  placeholder="Sector (optional)"
+                  value={newSector}
+                  onChange={(e) => setNewSector(e.target.value)}
+                  className="search-input create-input"
+                />
+                <div className="create-actions">
+                  <button
+                    className="btn-add"
+                    onClick={createAndAdd}
+                    disabled={!newSymbol.trim() || !newName.trim()}
+                  >
+                    Add to Watchlist
+                  </button>
+                  <button
+                    className="btn-cancel"
+                    onClick={() => {
+                      setShowCreate(false);
+                      setNewSymbol("");
+                      setNewName("");
+                      setNewSector("");
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             )}
+
+            <div className="search-existing">
+              <input
+                type="text"
+                placeholder="Or search existing companies..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="search-input"
+              />
+              {search && filtered.length > 0 && (
+                <div className="search-results">
+                  {filtered.slice(0, 10).map((c) => (
+                    <div key={c.id} className="search-result-row">
+                      <span className="result-symbol">{c.symbol}</span>
+                      <span className="result-name">{c.name}</span>
+                      <button
+                        className="btn-add"
+                        onClick={() => addToWatchlist(c.id)}
+                      >
+                        + Add
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {search && filtered.length === 0 && (
+                <div className="search-results">
+                  <div className="search-result-row">
+                    <span className="result-name">No matching companies found</span>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </>
       )}

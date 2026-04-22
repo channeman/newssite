@@ -69,6 +69,11 @@ export async function GET(request) {
 
   const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+  let companiesCreated = 0;
+  let articlesCreated = 0;
+  let skipped = 0;
+  const errors = [];
+
   try {
     const res = await fetch(JMN_RSS_URL, {
       headers: { "User-Agent": "TSXVNewsBot/1.0" },
@@ -76,19 +81,9 @@ export async function GET(request) {
     const xml = await res.text();
     const items = parseRSS(xml);
 
-    let companiesCreated = 0;
-    let articlesCreated = 0;
-    let skipped = 0;
-    const errors = [];
-
     for (const item of items) {
       const info = extractFromURL(item.link);
-      if (!info) {
-        skipped++;
-        continue;
-      }
-
-      if (info.exchange !== "TSXV") {
+      if (!info || info.exchange !== "TSXV") {
         skipped++;
         continue;
       }
@@ -105,7 +100,6 @@ export async function GET(request) {
       }
 
       let companyId;
-
       const { data: existingCompany } = await supabase
         .from("companies")
         .select("id")
@@ -152,17 +146,81 @@ export async function GET(request) {
         articlesCreated++;
       }
     }
-
-    return Response.json({
-      ok: true,
-      companiesCreated,
-      articlesCreated,
-      skipped,
-      errors: errors.length ? errors : undefined,
-    });
   } catch (e) {
-    return Response.json({ error: e.message }, { status: 500 });
+    errors.push(`JMN fetch: ${e.message}`);
   }
+
+  try {
+    const { data: watched } = await supabase
+      .from("watched_companies")
+      .select("company_id, companies(id, symbol, sector)");
+
+    if (watched && watched.length > 0) {
+      const nonMining = watched.filter(
+        (w) => w.companies?.sector !== "Mining"
+      );
+
+      for (const w of nonMining) {
+        if (!w.companies) continue;
+        const symbol = w.companies.symbol;
+
+        try {
+          const yfUrl = `https://finance.yahoo.com/rss/headline?s=${symbol}.V`;
+          const yfRes = await fetch(yfUrl, {
+            headers: { "User-Agent": "Mozilla/5.0" },
+          });
+          const yfXml = await yfRes.text();
+          const yfItems = parseRSS(yfXml);
+
+          for (const item of yfItems.slice(0, 10)) {
+            const { data: existing } = await supabase
+              .from("articles")
+              .select("id")
+              .eq("url", item.link)
+              .single();
+
+            if (existing) {
+              skipped++;
+              continue;
+            }
+
+            const publishedAt = item.pubDate
+              ? new Date(item.pubDate).toISOString()
+              : new Date().toISOString();
+
+            const { error: articleErr } = await supabase
+              .from("articles")
+              .insert({
+                company_id: w.companies.id,
+                title: item.title,
+                url: item.link,
+                source: "Yahoo Finance",
+                published_at: publishedAt,
+                summary: item.summary || null,
+              });
+
+            if (articleErr) {
+              errors.push(`YF ${symbol}: ${articleErr.message}`);
+            } else {
+              articlesCreated++;
+            }
+          }
+        } catch {
+          errors.push(`YF ${symbol}: fetch failed`);
+        }
+      }
+    }
+  } catch (e) {
+    errors.push(`YF watchlist: ${e.message}`);
+  }
+
+  return Response.json({
+    ok: true,
+    companiesCreated,
+    articlesCreated,
+    skipped,
+    errors: errors.length ? errors : undefined,
+  });
 }
 
 function extractCompanyName(title) {

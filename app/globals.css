@@ -293,6 +293,67 @@ a {
   margin-bottom: 0.75rem;
 }
 
+.btn-create-toggle {
+  background: none;
+  color: var(--accent);
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  width: 100%;
+  margin-bottom: 0.75rem;
+  transition: border-color 0.15s;
+}
+
+.btn-create-toggle:hover {
+  border-color: var(--accent);
+}
+
+.create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.create-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.create-actions .btn-add {
+  flex: 1;
+}
+
+.create-actions .btn-add:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-cancel {
+  background: none;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.btn-cancel:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+.search-existing {
+  margin-top: 0.75rem;
+}
+
 .search-input {
   width: 100%;
   background: var(--surface);
