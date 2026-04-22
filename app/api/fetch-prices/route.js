@@ -47,7 +47,8 @@ export async function GET() {
           company,
           price: meta.regularMarketPrice,
           prevClose: meta.chartPreviousClose || meta.previousClose,
-          marketCap: null,
+          sharesOutstanding: meta.sharesOutstanding || null,
+          marketCap: meta.marketCap || null,
         });
       } catch {}
     }
@@ -61,6 +62,8 @@ export async function GET() {
         .update({
           price: r.price,
           price_change_pct: change ? Math.round(change * 100) / 100 : null,
+          shares_outstanding: r.sharesOutstanding,
+          market_cap: r.marketCap,
           price_updated_at: new Date().toISOString(),
         })
         .eq("id", r.company.id);

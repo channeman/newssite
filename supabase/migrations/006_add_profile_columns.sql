@@ -1,0 +1,2 @@
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS shares_outstanding BIGINT;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS description TEXT;
