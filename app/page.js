@@ -10,6 +10,8 @@ export default function Home() {
   const [filter, setFilter] = useState("all");
   const [fetching, setFetching] = useState(false);
   const [fetchResult, setFetchResult] = useState(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeResult, setAnalyzeResult] = useState(null);
 
   useEffect(() => {
     fetchCompanies();
@@ -60,6 +62,32 @@ export default function Home() {
     setTimeout(() => setFetchResult(null), 5000);
   }
 
+  async function handleAnalyze() {
+    setAnalyzing(true);
+    setAnalyzeResult(null);
+    try {
+      const res = await fetch("/api/analyze-articles");
+      const data = await res.json();
+      setAnalyzeResult(data);
+      fetchArticles();
+    } catch {
+      setAnalyzeResult({ error: "Failed to analyze" });
+    }
+    setAnalyzing(false);
+    setTimeout(() => setAnalyzeResult(null), 8000);
+  }
+
+  function impactLabel(impact) {
+    const labels = {
+      very_positive: "++",
+      positive: "+",
+      neutral: "~",
+      negative: "-",
+      very_negative: "--",
+    };
+    return labels[impact] || "~";
+  }
+
   function timeAgo(dateStr) {
     const diff = Date.now() - new Date(dateStr).getTime();
     const mins = Math.floor(diff / 60000);
@@ -91,7 +119,14 @@ export default function Home() {
           disabled={fetching}
           className="btn-fetch"
         >
-          {fetching ? "Fetching..." : "Fetch News"}
+          {fetching ? "..." : "Fetch"}
+        </button>
+        <button
+          onClick={handleAnalyze}
+          disabled={analyzing}
+          className="btn-analyze"
+        >
+          {analyzing ? "Analyzing..." : "AI Analyze"}
         </button>
       </div>
       {fetchResult && (
@@ -99,6 +134,13 @@ export default function Home() {
           {fetchResult.error
             ? fetchResult.error
             : `${fetchResult.articlesCreated} new articles, ${fetchResult.companiesCreated} new companies`}
+        </div>
+      )}
+      {analyzeResult && (
+        <div className={`fetch-status ${analyzeResult.error ? "error" : "success"}`}>
+          {analyzeResult.error
+            ? analyzeResult.error
+            : `Analyzed ${analyzeResult.analyzed} articles with AI`}
         </div>
       )}
 
@@ -122,11 +164,24 @@ export default function Home() {
                 <span className="company-badge">
                   {article.companies?.symbol}
                 </span>
+                {article.importance && (
+                  <span className={`importance-badge imp-${article.importance}`}>
+                    {article.importance}
+                  </span>
+                )}
+                {article.impact && (
+                  <span className={`impact-badge impact-${article.impact}`}>
+                    {impactLabel(article.impact)}
+                  </span>
+                )}
                 <span className="article-source">{article.source}</span>
                 <span className="article-time">{timeAgo(article.published_at)}</span>
               </div>
               <h2 className="article-title">{article.title}</h2>
-              {article.summary && (
+              {article.ai_summary && (
+                <p className="article-ai-summary">{article.ai_summary}</p>
+              )}
+              {article.summary && !article.ai_summary && (
                 <p className="article-summary">{article.summary}</p>
               )}
             </a>

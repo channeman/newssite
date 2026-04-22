@@ -111,7 +111,6 @@ a {
 }
 
 .btn-fetch {
-  margin-left: auto;
   background: var(--accent);
   color: #fff;
   border: none;
@@ -150,6 +149,67 @@ a {
   background: rgba(239, 68, 68, 0.1);
   color: var(--danger);
   border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.btn-analyze {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+
+.btn-analyze:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn-analyze:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.importance-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.2rem;
+  height: 1.2rem;
+  border-radius: 3px;
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.imp-1 { background: #333; color: #888; }
+.imp-2 { background: #2a3a4a; color: #6b8aaa; }
+.imp-3 { background: #2a3a2a; color: #8aaa6b; }
+.imp-4 { background: #3a3a1a; color: #d4a843; }
+.imp-5 { background: #3a1a1a; color: #ef6b6b; }
+
+.impact-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+}
+
+.impact-very_positive { color: #22c55e; }
+.impact-positive { color: #4ade80; }
+.impact-neutral { color: var(--text-dim); }
+.impact-negative { color: #f87171; }
+.impact-very_negative { color: #ef4444; }
+
+.article-ai-summary {
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  line-height: 1.45;
+  font-style: italic;
 }
 
 .loading,
