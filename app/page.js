@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
-function ArticleCard({ article, impactLabel, timeAgo, onDeepAnalyze, deepLoading }) {
+function ArticleCard({ article, impactLabel, timeAgo, onDeepAnalyze, deepLoading, priceMap }) {
   const [expanded, setExpanded] = useState(false);
   const hasAnalysis = article.ai_summary || article.importance;
 
@@ -30,6 +30,14 @@ function ArticleCard({ article, impactLabel, timeAgo, onDeepAnalyze, deepLoading
             </span>
           )}
           <span className="article-source">{article.source}</span>
+          {priceMap[article.companies?.symbol] && (
+            <span className={`price-tag ${priceMap[article.companies.symbol].change >= 0 ? "price-up" : "price-down"}`}>
+              ${priceMap[article.companies.symbol].price.toFixed(3)}
+              {priceMap[article.companies.symbol].change != null && (
+                <span> {priceMap[article.companies.symbol].change >= 0 ? "+" : ""}{priceMap[article.companies.symbol].change}%</span>
+              )}
+            </span>
+          )}
           <span className="article-time">{timeAgo(article.published_at)}</span>
         </div>
         <h2 className="article-title">{article.title}</h2>
@@ -91,6 +99,8 @@ export default function Home() {
   const [analyzeResult, setAnalyzeResult] = useState(null);
   const [deepLoading, setDeepLoading] = useState({});
   const [watchedIds, setWatchedIds] = useState([]);
+  const [priceMap, setPriceMap] = useState({});
+  const [fetchingPrices, setFetchingPrices] = useState(false);
 
   useEffect(() => {
     fetchCompanies();
@@ -104,9 +114,14 @@ export default function Home() {
   async function fetchCompanies() {
     const { data } = await supabase
       .from("companies")
-      .select("id, symbol, name")
+      .select("id, symbol, name, price, price_change_pct")
       .order("symbol");
     setCompanies(data || []);
+    const map = {};
+    (data || []).forEach((c) => {
+      if (c.price) map[c.symbol] = { price: c.price, change: c.price_change_pct };
+    });
+    setPriceMap(map);
   }
 
   async function fetchWatchlist() {
@@ -186,6 +201,15 @@ export default function Home() {
     setDeepLoading((prev) => ({ ...prev, [articleId]: false }));
   }
 
+  async function handleFetchPrices() {
+    setFetchingPrices(true);
+    try {
+      await fetch("/api/fetch-prices");
+      fetchCompanies();
+    } catch {}
+    setFetchingPrices(false);
+  }
+
   function impactLabel(impact) {
     const labels = {
       very_positive: "++",
@@ -232,6 +256,13 @@ export default function Home() {
           {fetching ? "..." : "Fetch"}
         </button>
         <button
+          onClick={handleFetchPrices}
+          disabled={fetchingPrices}
+          className="btn-price"
+        >
+          {fetchingPrices ? "..." : "$"}
+        </button>
+        <button
           onClick={handleAnalyze}
           disabled={analyzing}
           className="btn-analyze"
@@ -270,6 +301,7 @@ export default function Home() {
               timeAgo={timeAgo}
               onDeepAnalyze={handleDeepAnalyze}
               deepLoading={deepLoading}
+              priceMap={priceMap}
             />
           ))}
         </div>

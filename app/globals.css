@@ -82,6 +82,42 @@ a {
   color: var(--text);
 }
 
+.nav-search-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.nav-search-btn:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+.nav-search-bar {
+  padding: 0.5rem 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.nav-search-input {
+  width: 100%;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  outline: none;
+}
+
+.nav-search-input:focus {
+  border-color: var(--accent);
+}
+
 .feed-header {
   display: flex;
   align-items: center;
@@ -172,6 +208,42 @@ a {
 .btn-analyze:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.btn-price {
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s;
+}
+
+.btn-price:hover {
+  border-color: var(--text-dim);
+}
+
+.btn-price:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.price-tag {
+  font-size: 0.7rem;
+  font-weight: 600;
+  font-family: monospace;
+}
+
+.price-up {
+  color: #22c55e;
+}
+
+.price-down {
+  color: #ef4444;
 }
 
 .importance-badge {
@@ -631,4 +703,85 @@ a {
   .article-title {
     font-size: 0.875rem;
   }
+}
+
+.search-page h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.search-main-input {
+  width: 100%;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  outline: none;
+  margin-bottom: 1.5rem;
+}
+
+.search-main-input:focus {
+  border-color: var(--accent);
+}
+
+.search-section {
+  margin-bottom: 2rem;
+}
+
+.search-section h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: var(--text-dim);
+}
+
+.search-companies {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 0.5rem;
+}
+
+.search-company-card {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  transition: border-color 0.15s;
+}
+
+.search-company-card:hover {
+  border-color: var(--accent);
+}
+
+.search-company-symbol {
+  font-weight: 700;
+  color: var(--accent);
+  min-width: 40px;
+}
+
+.search-company-name {
+  flex: 1;
+  font-size: 0.8rem;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-company-commodity {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.search-company-price {
+  font-size: 0.7rem;
+  font-family: monospace;
+  font-weight: 600;
 }
