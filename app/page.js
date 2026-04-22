@@ -90,14 +90,16 @@ export default function Home() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeResult, setAnalyzeResult] = useState(null);
   const [deepLoading, setDeepLoading] = useState({});
+  const [watchedIds, setWatchedIds] = useState([]);
 
   useEffect(() => {
     fetchCompanies();
+    fetchWatchlist();
   }, []);
 
   useEffect(() => {
     fetchArticles();
-  }, [filter]);
+  }, [filter, watchedIds]);
 
   async function fetchCompanies() {
     const { data } = await supabase
@@ -105,6 +107,13 @@ export default function Home() {
       .select("id, symbol, name")
       .order("symbol");
     setCompanies(data || []);
+  }
+
+  async function fetchWatchlist() {
+    const { data } = await supabase
+      .from("watched_companies")
+      .select("company_id");
+    setWatchedIds((data || []).map((w) => w.company_id));
   }
 
   async function fetchArticles() {
@@ -115,7 +124,9 @@ export default function Home() {
       .order("published_at", { ascending: false })
       .limit(50);
 
-    if (filter !== "all") {
+    if (filter === "watchlist") {
+      query = query.in("company_id", watchedIds.length > 0 ? watchedIds : [0]);
+    } else if (filter !== "all") {
       query = query.eq("company_id", filter);
     }
 
@@ -206,6 +217,7 @@ export default function Home() {
           className="filter-select"
         >
           <option value="all">All Companies</option>
+          <option value="watchlist">Watchlist</option>
           {companies.map((c) => (
             <option key={c.id} value={c.id}>
               {c.symbol} — {c.name}
