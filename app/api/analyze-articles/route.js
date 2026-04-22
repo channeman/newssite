@@ -42,7 +42,7 @@ export async function GET() {
     .select("id, title")
     .is("ai_summary", null)
     .order("published_at", { ascending: false })
-    .limit(10);
+    .limit(5);
 
   if (fetchErr) {
     return Response.json({ error: fetchErr.message }, { status: 500 });
