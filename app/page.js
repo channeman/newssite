@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
-function ArticleCard({ article, impactLabel, timeAgo, onDeepAnalyze, deepLoading, priceMap, isWatched }) {
+function ArticleCard({ article, impactLabel, timeAgo, onDeepAnalyze, deepLoading, priceMap, isWatched, showDismiss, onDismiss }) {
   const [expanded, setExpanded] = useState(false);
+  const router = useRouter();
   const hasAnalysis = article.ai_summary || article.importance;
 
   return (
@@ -17,13 +18,25 @@ function ArticleCard({ article, impactLabel, timeAgo, onDeepAnalyze, deepLoading
         className="article-card"
       >
         <div className="article-meta">
-          <Link
-            href={`/company/${article.companies?.symbol}`}
+          <span
             className="company-badge-link"
-            onClick={(e) => e.stopPropagation()}
+            role="link"
+            tabIndex={0}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              router.push(`/company/${article.companies?.symbol}`);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                e.stopPropagation();
+                router.push(`/company/${article.companies?.symbol}`);
+              }
+            }}
           >
             {article.companies?.symbol}
-          </Link>
+          </span>
           {article.importance && (
             <span className={`importance-badge imp-${article.importance}`}>
               {article.importance}
@@ -53,6 +66,15 @@ function ArticleCard({ article, impactLabel, timeAgo, onDeepAnalyze, deepLoading
           <p className="article-summary">{article.summary}</p>
         )}
       </a>
+      {showDismiss && (
+        <button
+          className="btn-hide-article"
+          onClick={(e) => { e.stopPropagation(); onDismiss(article.id); }}
+          title="Hide article"
+        >
+          ×
+        </button>
+      )}
       {hasAnalysis && (
         <div className="article-actions">
           {article.deep_analysis ? (
@@ -99,6 +121,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
   const [fetching, setFetching] = useState(false);
+  const [fetchingWatchlist, setFetchingWatchlist] = useState(false);
   const [fetchResult, setFetchResult] = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeResult, setAnalyzeResult] = useState(null);
@@ -106,6 +129,11 @@ export default function Home() {
   const [watchedIds, setWatchedIds] = useState([]);
   const [priceMap, setPriceMap] = useState({});
   const [fetchingPrices, setFetchingPrices] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null);
+  const [lastFetchedAt, setLastFetchedAt] = useState(null);
+  const [clearing, setClearing] = useState(false);
+  const [clearResult, setClearResult] = useState(null);
 
   useEffect(() => {
     fetchCompanies();
@@ -136,11 +164,23 @@ export default function Home() {
     setWatchedIds((data || []).map((w) => w.company_id));
   }
 
+  async function handleDismiss(articleId) {
+    setArticles((prev) => prev.filter((a) => a.id !== articleId));
+    try {
+      await fetch("/api/hide-article", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ articleId }),
+      });
+    } catch {}
+  }
+
   async function fetchArticles() {
     setLoading(true);
     let query = supabase
       .from("articles")
       .select("*, companies(symbol, name)")
+      .eq("hidden", false)
       .order("published_at", { ascending: false })
       .limit(50);
 
@@ -151,24 +191,32 @@ export default function Home() {
     }
 
     const { data, error } = await query;
-    if (!error) setArticles(data || []);
+    if (!error) {
+      setArticles(data || []);
+      const newest = (data || []).reduce((max, a) =>
+        a.created_at && (!max || a.created_at > max) ? a.created_at : max, null);
+      if (newest) setLastFetchedAt(newest);
+    }
     setLoading(false);
   }
 
-  async function handleFetchNews() {
-    setFetching(true);
+  async function handleFetchNews(watchlistOnly = false) {
+    const setter = watchlistOnly ? setFetchingWatchlist : setFetching;
+    setter(true);
     setFetchResult(null);
     try {
-      const res = await fetch("/api/fetch-news");
-      const data = await res.json();
+      const url = watchlistOnly ? "/api/fetch-news?watchlistOnly=1" : "/api/fetch-news";
+      const res = await fetch(url);
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = { error: `Server error (${res.status}): ${text.slice(0, 200)}` }; }
+      if (!res.ok && !data.error) data = { error: `Server error ${res.status}` };
       setFetchResult(data);
-      fetchArticles();
-      fetchCompanies();
-    } catch {
-      setFetchResult({ error: "Failed to fetch" });
+      if (!data.error) { fetchArticles(); fetchCompanies(); }
+    } catch (e) {
+      setFetchResult({ error: `Network error: ${e.message}` });
     }
-    setFetching(false);
-    setTimeout(() => setFetchResult(null), 5000);
+    setter(false);
   }
 
   async function handleAnalyze() {
@@ -176,14 +224,16 @@ export default function Home() {
     setAnalyzeResult(null);
     try {
       const res = await fetch("/api/analyze-articles");
-      const data = await res.json();
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = { error: `Server error (${res.status}): ${text.slice(0, 200)}` }; }
+      if (!res.ok && !data.error) data = { error: `Server error ${res.status}` };
       setAnalyzeResult(data);
-      fetchArticles();
-    } catch {
-      setAnalyzeResult({ error: "Failed to analyze" });
+      if (!data.error) fetchArticles();
+    } catch (e) {
+      setAnalyzeResult({ error: `Network error: ${e.message}` });
     }
     setAnalyzing(false);
-    setTimeout(() => setAnalyzeResult(null), 8000);
   }
 
   async function handleDeepAnalyze(articleId) {
@@ -215,6 +265,43 @@ export default function Home() {
     setFetchingPrices(false);
   }
 
+  async function handleImportTSXV() {
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const res = await fetch("/api/import-tsxv");
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = { error: `Server error (${res.status}): ${text.slice(0, 200)}` }; }
+      setImportResult(data);
+      if (!data.error) fetchCompanies();
+    } catch (e) {
+      setImportResult({ error: `Network error: ${e.message}` });
+    }
+    setImporting(false);
+  }
+
+  async function handleClearWatchlist() {
+    if (!confirm("Delete all articles for watchlisted companies?")) return;
+    setClearing(true);
+    setClearResult(null);
+    try {
+      const res = await fetch("/api/clear-articles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ watchlistOnly: true }),
+      });
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = { error: `Server error (${res.status})` }; }
+      setClearResult(data);
+      if (!data.error) fetchArticles();
+    } catch (e) {
+      setClearResult({ error: `Network error: ${e.message}` });
+    }
+    setClearing(false);
+  }
+
   function impactLabel(impact) {
     const labels = {
       very_positive: "++",
@@ -235,6 +322,16 @@ export default function Home() {
     const days = Math.floor(hrs / 24);
     return `${days}d ago`;
   }
+
+  const staleWarning = useMemo(() => {
+    if (!lastFetchedAt) return null;
+    const eastern = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+    const h = eastern.getHours();
+    if (h < 6 || h >= 9) return null;
+    const minsAgo = Math.floor((Date.now() - new Date(lastFetchedAt).getTime()) / 60000);
+    if (minsAgo <= 20) return null;
+    return { minsAgo, level: minsAgo > 45 ? "error" : "warning" };
+  }, [lastFetchedAt]);
 
   return (
     <div className="feed">
@@ -261,6 +358,13 @@ export default function Home() {
           {fetching ? "..." : "Fetch"}
         </button>
         <button
+          onClick={() => handleFetchNews(true)}
+          disabled={fetchingWatchlist}
+          className="btn-fetch-watchlist"
+        >
+          {fetchingWatchlist ? "..." : "Watchlist"}
+        </button>
+        <button
           onClick={handleFetchPrices}
           disabled={fetchingPrices}
           className="btn-price"
@@ -274,19 +378,64 @@ export default function Home() {
         >
           {analyzing ? "..." : "AI"}
         </button>
+        <button
+          onClick={handleImportTSXV}
+          disabled={importing}
+          className="btn-import"
+        >
+          {importing ? "..." : "Import TSXV"}
+        </button>
+        <button
+          onClick={handleClearWatchlist}
+          disabled={clearing}
+          className="btn-clear"
+        >
+          {clearing ? "..." : "Reset Watchlist"}
+        </button>
       </div>
+      {clearResult && (
+        <div className={`fetch-status ${clearResult.error ? "error" : "success"}`}>
+          <span>
+            {clearResult.error
+              ? clearResult.error
+              : `Cleared ${clearResult.articlesCleared} watchlist articles`}
+          </span>
+          <button className="dismiss-btn" onClick={() => setClearResult(null)}>×</button>
+        </div>
+      )}
+      {staleWarning && (
+        <div className={`fetch-stale ${staleWarning.level}`}>
+          Last fetch {staleWarning.minsAgo}m ago — cron may have failed
+        </div>
+      )}
       {fetchResult && (
         <div className={`fetch-status ${fetchResult.error ? "error" : "success"}`}>
-          {fetchResult.error
-            ? fetchResult.error
-            : `${fetchResult.articlesCreated} new articles, ${fetchResult.companiesCreated} new companies`}
+          <span>
+            {fetchResult.error
+              ? fetchResult.error
+              : `${fetchResult.articlesCreated} new articles, ${fetchResult.companiesCreated} new companies`}
+          </span>
+          <button className="dismiss-btn" onClick={() => setFetchResult(null)}>×</button>
         </div>
       )}
       {analyzeResult && (
         <div className={`fetch-status ${analyzeResult.error ? "error" : "success"}`}>
-          {analyzeResult.error
-            ? analyzeResult.error
-            : `Analyzed ${analyzeResult.analyzed} articles with AI`}
+          <span>
+            {analyzeResult.error
+              ? analyzeResult.error
+              : `Analyzed ${analyzeResult.analyzed} articles with AI`}
+          </span>
+          <button className="dismiss-btn" onClick={() => setAnalyzeResult(null)}>×</button>
+        </div>
+      )}
+      {importResult && (
+        <div className={`fetch-status ${importResult.error ? "error" : "success"}`}>
+          <span>
+            {importResult.error
+              ? importResult.error
+              : `Imported ${importResult.imported} TSXV companies (found ${importResult.totalFound}, skipped ${importResult.skipped})`}
+          </span>
+          <button className="dismiss-btn" onClick={() => setImportResult(null)}>×</button>
         </div>
       )}
 
@@ -308,6 +457,8 @@ export default function Home() {
               deepLoading={deepLoading}
               priceMap={priceMap}
               isWatched={watchedIds.includes(article.company_id)}
+              showDismiss={filter !== "all" && filter !== "watchlist"}
+              onDismiss={handleDismiss}
             />
           ))}
         </div>

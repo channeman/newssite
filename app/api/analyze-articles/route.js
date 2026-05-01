@@ -28,13 +28,25 @@ Return ONLY the JSON array, no other text. The array must have exactly the same 
 
 Headlines:`;
 
-export async function GET() {
+function inEasternWindow() {
+  const eastern = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+  const h = eastern.getHours();
+  return h >= 6 && h < 9;
+}
+
+export async function GET(request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const geminiKey = process.env.GEMINI_API_KEY;
 
   if (!supabaseUrl || !supabaseKey || !geminiKey) {
     return Response.json({ error: "Missing config" }, { status: 500 });
+  }
+
+  const cronSecret = process.env.CRON_SECRET;
+  const isCron = cronSecret && request.headers.get("authorization") === `Bearer ${cronSecret}`;
+  if (isCron && !inEasternWindow()) {
+    return Response.json({ skipped: true, reason: "Outside 6–9 AM Eastern window" });
   }
 
   const supabase = createClient(supabaseUrl, supabaseKey);
@@ -133,7 +145,7 @@ export async function GET() {
         .eq("id", companyId)
         .single();
 
-      if (existing && !existing.commodity) {
+      if (existing && (!existing.commodity || !existing.region)) {
         await supabase
           .from("companies")
           .update({

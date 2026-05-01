@@ -17,17 +17,19 @@ export async function GET(request) {
 
   const supabase = createClient(supabaseUrl, supabaseKey);
 
+  const safeQ = q.replace(/[%_,()'"\\]/g, "");
+
   const [articlesRes, companiesRes] = await Promise.all([
     supabase
       .from("articles")
       .select("id, title, url, published_at, importance, impact, ai_summary, source, companies(symbol, name)")
-      .or(`title.ilike.%${q}%,ai_summary.ilike.%${q}%`)
+      .ilike("title", `%${safeQ}%`)
       .order("published_at", { ascending: false })
       .limit(20),
     supabase
       .from("companies")
       .select("id, symbol, name, commodity, region, price, price_change_pct")
-      .or(`symbol.ilike.%${q}%,name.ilike.%${q}%,commodity.ilike.%${q}%`)
+      .or(`symbol.ilike.%${safeQ}%,name.ilike.%${safeQ}%,commodity.ilike.%${safeQ}%`)
       .limit(10),
   ]);
 

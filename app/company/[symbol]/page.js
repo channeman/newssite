@@ -10,6 +10,7 @@ export default function CompanyPage() {
   const [articles, setArticles] = useState([]);
   const [peers, setPeers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
     fetchCompany();
@@ -67,12 +68,14 @@ export default function CompanyPage() {
     return `${days}d ago`;
   }
 
-  function formatNumber(n) {
+  function formatNumber(n, dollarPrefix) {
     if (!n) return "—";
-    if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
-    if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
-    if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
-    return String(n);
+    let s;
+    if (n >= 1e9) s = `${(n / 1e9).toFixed(1)}B`;
+    else if (n >= 1e6) s = `${(n / 1e6).toFixed(1)}M`;
+    else if (n >= 1e3) s = `${(n / 1e3).toFixed(1)}K`;
+    else s = String(n);
+    return dollarPrefix ? `$${s}` : s;
   }
 
   function impactLabel(impact) {
@@ -110,7 +113,7 @@ export default function CompanyPage() {
             </div>
           )}
         </div>
-        <div className="profile-name">{company.name}</div>
+        <div className="profile-name">{company.long_name || company.name}</div>
         <div className="profile-tags">
           {company.sector && <span className="profile-tag">{company.sector}</span>}
           {company.commodity && <span className="profile-tag">{company.commodity}</span>}
@@ -122,11 +125,43 @@ export default function CompanyPage() {
       <div className="profile-stats">
         <div className="stat-card">
           <div className="stat-label">Market Cap</div>
-          <div className="stat-value">{company.market_cap ? `$${formatNumber(company.market_cap)}` : "—"}</div>
+          <div className="stat-value">
+            {formatNumber(company.market_cap || (company.shares_outstanding && company.price ? Math.round(company.shares_outstanding * company.price) : null), true)}
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Cash Position</div>
+          <div className="stat-value">
+            {formatNumber(company.cash_position, true)}
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Price</div>
+          <div className="stat-value">{company.price ? `$${company.price.toFixed(3)}` : "—"}</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">Shares Out</div>
           <div className="stat-value">{formatNumber(company.shares_outstanding)}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Volume</div>
+          <div className="stat-value">{formatNumber(company.volume)}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Day Range</div>
+          <div className="stat-value">
+            {company.day_high && company.day_low
+              ? `$${company.day_low.toFixed(3)} – $${company.day_high.toFixed(3)}`
+              : "—"}
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">52-Week Range</div>
+          <div className="stat-value">
+            {company.week_52_high && company.week_52_low
+              ? `$${company.week_52_low.toFixed(3)} – $${company.week_52_high.toFixed(3)}`
+              : "—"}
+          </div>
         </div>
         <div className="stat-card">
           <div className="stat-label">Articles</div>
@@ -138,12 +173,41 @@ export default function CompanyPage() {
         </div>
       </div>
 
-      {company.description && (
-        <div className="profile-section">
-          <h2 className="section-title">About</h2>
-          <p className="profile-desc">{company.description}</p>
+      <div className="profile-section">
+        <div className="section-title-row">
+          <h2 className="section-title" style={{ borderTop: "none", paddingTop: 0 }}>About</h2>
+          {!company.description && (
+            <button
+              className="btn-generate"
+              disabled={generating}
+              onClick={async () => {
+                setGenerating(true);
+                try {
+                  const res = await fetch("/api/generate-profile", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ companyId: company.id }),
+                  });
+                  const data = await res.json();
+                  if (data.ok && data.description) {
+                    setCompany((c) => ({ ...c, description: data.description }));
+                  }
+                } catch (e) {
+                  console.error("Profile generation failed:", e);
+                }
+                setGenerating(false);
+              }}
+            >
+              {generating ? "Generating..." : "Generate Profile"}
+            </button>
+          )}
         </div>
-      )}
+        {company.description ? (
+          <p className="profile-desc">{company.description}</p>
+        ) : (
+          <p className="profile-desc" style={{ fontStyle: "italic" }}>No description yet. Click "Generate Profile" to create one using AI.</p>
+        )}
+      </div>
 
       {peers.length > 0 && (
         <div className="profile-section">
@@ -162,7 +226,7 @@ export default function CompanyPage() {
                   )}
                 </div>
                 {p.market_cap && (
-                  <div className="peer-mcap">MCap: ${formatNumber(p.market_cap)}</div>
+                  <div className="peer-mcap">MCap: {formatNumber(p.market_cap, true)}</div>
                 )}
               </a>
             ))}
